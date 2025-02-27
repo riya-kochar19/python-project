@@ -1,37 +1,67 @@
-name: CI/CD Pipeline (Manual Trigger)
+name: CI/CD Pipeline
 
 on:
-  workflow_dispatch:  # Allows manual triggering from GitHub Actions UI
+  workflow_dispatch:  # Allows manual triggering
 
 jobs:
-  build-and-deploy:
-    name: Build and Deploy Docker Container
+  test:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v3
         with:
-          fetch-depth: 0
-      
-      - name: Verify Files in Directory
-        run: ls -l
+          python-version: 3.9
 
-      - name: Build Docker Image
-        run: |
-          docker build -t my-python-app:latest .
-          docker tag my-python-app:latest ${{ secrets.DOCKER_USERNAME }}/my-python-app:latest
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-      - name: Deploy on EC2
-        env:
-          PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
-          HOST: ${{ secrets.EC2_HOST }}
-          USER: ubuntu
-        run: |
-          echo "$PRIVATE_KEY" > private_key.pem
-          chmod 600 private_key.pem
-          ssh -o StrictHostKeyChecking=no -i private_key.pem $USER@$HOST << EOF
-            docker pull ${{ secrets.DOCKER_USERNAME }}/my-python-app:latest
-            docker stop my-python-app || true
-            docker rm my-python-app || true
-            docker run -d -p 5000:5000 --name my-python-app ${{ secrets.DOCKER_USERNAME }}/my-python-app:latest
-          EOF
+      - name: Build Docker image
+        run: docker build -t python-flask-app .
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH into EC2 and deploy
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            # Navigate to home directory
+            cd ~
+
+            # Ensure Docker is installed
+            if ! command -v docker &> /dev/null; then
+              echo "Docker is not installed. Installing..."
+              sudo apt update
+              sudo apt install -y docker.io
+              sudo systemctl start docker
+              sudo systemctl enable docker
+              sudo usermod -aG docker $USER
+            fi
+            
+            # Remove old container if it exists
+            docker stop python-flask-app || true
+            docker rm python-flask-app || true
+
+            # Remove old image
+            docker rmi python-flask-app || true
+
+            # Pull latest code (if applicable)
+            cd ~/python-flask-app || git clone https://github.com/riya-kochar19/python-project.git
+            cd ~/python-flask-app
+            git pull origin main
+
+            # Build and run the container
+            docker build -t python-flask-app .
+            docker run -d --name python-flask-app python-flask-app
+          
