@@ -36,3 +36,4 @@ jobs:
             docker rm my-python-app || true
             docker run -d -p 5000:5000 --name my-python-app ${{ secrets.DOCKER_USERNAME }}/my-python-app:latest
           EOF
+
