@@ -5,10 +5,7 @@ FROM python:3.9
 WORKDIR /app
 
 # Copy application files
-COPY requiremenets.txt .
-
-# Install dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
 
 # Expose the application port
 EXPOSE 5000
