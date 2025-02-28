@@ -50,6 +50,10 @@ jobs:
           sudo systemctl enable docker
         
           # Stop and remove any existing container running on port 5000
+          # Stop and remove existing container (if it exists)
+          if [ \$(docker ps -aq -f name=my-python-app) ]; then
+          docker stop my-python-app
+          docker rm my-python-app
           
           existing_container=\$(docker ps -q --filter "publish=5000")
           if [ ! -z "\$existing_container" ]; then
