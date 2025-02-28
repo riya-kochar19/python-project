@@ -1,4 +1,4 @@
-name: CI/CD Pipeline(docker)
+name: CI/CD Pipeline (Docker)
 
 on:
   workflow_dispatch:  # Allows manual triggering from GitHub Actions UI
@@ -16,7 +16,6 @@ jobs:
         with:
           python-version: '3.9'
 
-
   build-and-deploy:
     name: Build and Deploy Docker Container
     runs-on: ubuntu-latest
@@ -25,9 +24,16 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      - name: Log in to Docker Hub
+        run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
       - name: Build Docker Image
+        run: docker build -t my-python-app:latest .
+
+      - name: Tag and Push Docker Image
         run: |
-          docker build -t my-python-app:latest .
+          docker tag my-python-app:latest ${{ secrets.DOCKER_USERNAME }}/my-python-app:latest
+          docker push ${{ secrets.DOCKER_USERNAME }}/my-python-app:latest
 
       - name: Deploy on EC2
         env:
@@ -38,7 +44,12 @@ jobs:
           echo "$PRIVATE_KEY" > private_key.pem
           chmod 600 private_key.pem
           ssh -o StrictHostKeyChecking=no -i private_key.pem $USER@$HOST << EOF
+            sudo apt-get update
+            sudo apt-get install -y docker.io || true
+            sudo systemctl start docker
+            sudo systemctl enable docker
             docker stop my-python-app || true
             docker rm my-python-app || true
+            docker pull ${{ secrets.DOCKER_USERNAME }}/my-python-app:latest
             docker run -d -p 5000:5000 --name my-python-app ${{ secrets.DOCKER_USERNAME }}/my-python-app:latest
           EOF
